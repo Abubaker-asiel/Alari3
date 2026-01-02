@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "23063515593",
+    "project_id": "alrai3-71968",
+    "storage_bucket": "alrai3-71968.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:23063515593:android:8860da0ee4d8a2c86d1818",
+        "android_client_info": {
+          "package_name": "com.example.alrai3"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBVpqCRteyi4JHqi2cnMQaUm5cWItO5L3g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
