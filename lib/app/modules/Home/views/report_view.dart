@@ -7,20 +7,16 @@ class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
   _ReportsPageState createState() => _ReportsPageState();
 }
 
 class _ReportsPageState extends State<ReportsPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   int selectedDay = 1; // اليوم الافتراضي
-  String searchQuery = ''; // 🔹 نص البحث
+  String searchQuery = ''; // نص البحث
 
   @override
   Widget build(BuildContext context) {
-    DateTime now = DateTime.now();
-    DateTime targetDate = DateTime(now.year, 1, selectedDay);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('📊 تقرير العملاء', style: TextStyle(color: Colors.white)),
@@ -29,7 +25,8 @@ class _ReportsPageState extends State<ReportsPage> {
         actions: [
           IconButton(
             onPressed: () {
-              Get.to(() => ReportsPage2());
+              // Note: Ensure ReportsPage2 exists or is correctly imported
+              // Get.to(() => ReportsPage2()); 
             },
             icon: const Icon(Icons.people, color: Colors.white),
           ),
@@ -69,7 +66,7 @@ class _ReportsPageState extends State<ReportsPage> {
               decoration: InputDecoration(
                 labelText: '🔍 ابحث عن عميل',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                suffixIcon: Icon(Icons.search),
+                suffixIcon: const Icon(Icons.search),
               ),
               onChanged: (value) {
                 setState(() {
@@ -88,7 +85,7 @@ class _ReportsPageState extends State<ReportsPage> {
             child: StreamBuilder<QuerySnapshot>(
               stream: _firestore
                   .collection('customers')
-                  .where('date', isEqualTo: Timestamp.fromDate(targetDate))
+                  // We remove the .where('date') query to filter by day regardless of year
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -96,25 +93,31 @@ class _ReportsPageState extends State<ReportsPage> {
                 }
 
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.warning_amber_rounded, size: 80, color: Colors.orange),
-                        SizedBox(height: 10),
-                        Text('لا توجد بيانات لهذا اليوم!', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  );
+                  return _buildEmptyState();
                 }
 
-                var customers = snapshot.data!.docs
-                    .where((doc) =>
-                        doc['name'].toString().toLowerCase().contains(searchQuery) ||
-                        doc['number'].toString().contains(searchQuery))
-                    .toList(); // 🔹 تطبيق الفلترة بالبحث
+                // 🔹 Filter logic: Check both the Day AND the Search Query
+                var filteredCustomers = snapshot.data!.docs.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  
+                  // 1. Day Check
+                  if (data['date'] == null) return false;
+                  DateTime docDate = (data['date'] as Timestamp).toDate();
+                  bool matchesDay = docDate.day == selectedDay;
 
-                int customerCount = customers.length; // 🔹 عدد العملاء
+                  // 2. Search Check
+                  String name = data['name']?.toString().toLowerCase() ?? '';
+                  String number = data['number']?.toString() ?? '';
+                  bool matchesSearch = name.contains(searchQuery) || number.contains(searchQuery);
+
+                  return matchesDay && matchesSearch;
+                }).toList();
+
+                if (filteredCustomers.isEmpty) {
+                  return _buildEmptyState();
+                }
+
+                int customerCount = filteredCustomers.length;
 
                 return Column(
                   children: [
@@ -132,7 +135,8 @@ class _ReportsPageState extends State<ReportsPage> {
                         padding: const EdgeInsets.all(16),
                         itemCount: customerCount,
                         itemBuilder: (context, index) {
-                          var customer = customers[index];
+                          var customer = filteredCustomers[index];
+                          var data = customer.data() as Map<String, dynamic>;
 
                           return Card(
                             elevation: 5,
@@ -145,61 +149,46 @@ class _ReportsPageState extends State<ReportsPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _buildInfoRow(Icons.person, 'الاسم:', customer['name']),
-                                  _buildInfoRow(Icons.phone, 'رقم الهاتف:', customer['number']),
-                                  _buildInfoRow(Icons.attach_money, 'الدفعة المقدمة:', customer['advance']),
-                                  _buildInfoRow(Icons.qr_code, 'الكود:', customer['code']),
+                                  _buildInfoRow(Icons.person, 'الاسم:', data['name'] ?? ''),
+                                  _buildInfoRow(Icons.phone, 'رقم الهاتف:', data['number'] ?? ''),
+                                  _buildInfoRow(Icons.attach_money, 'الدفعة المقدمة:', data['advance'] ?? ''),
+                                  _buildInfoRow(Icons.qr_code, 'الكود:', data['code'] ?? ''),
                                   const Divider(thickness: 1),
 
                                   // 🔹 أزرار "تم الدفع" و "حذف العميل"
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      if (customer['visable'])
+                                      // Button only shows if customer is visible
+                                      if (data['visable'] == true)
                                         ElevatedButton.icon(
                                           onPressed: () async {
                                             await _firestore.collection('customers').doc(customer.id).update({'visable': false});
-
-                                            // إظهار Snackbar باستخدام GetX
                                             Get.snackbar(
                                               'تم', 'تم الدفع بنجاح!',
                                               snackPosition: SnackPosition.BOTTOM,
                                               backgroundColor: Colors.green,
                                               colorText: Colors.white,
-                                              borderRadius: 10,
-                                              margin: const EdgeInsets.all(15),
-                                              snackStyle: SnackStyle.FLOATING,
                                             );
                                           },
                                           icon: const Icon(Icons.check_circle, color: Colors.white),
                                           label: const Text('تم الدفع', style: TextStyle(color: Colors.white)),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.greenAccent,
-                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                          ),
+                                          style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent),
                                         ),
 
                                       ElevatedButton.icon(
                                         onPressed: () async {
                                           await _firestore.collection('customers').doc(customer.id).delete();
-
-                                          // إظهار Snackbar باستخدام GetX
                                           Get.snackbar(
-                                            'تم الحذف', 'تم حذف ${customer['name']} بنجاح!',
+                                            'تم الحذف', 'تم الحذف بنجاح!',
                                             snackPosition: SnackPosition.BOTTOM,
                                             backgroundColor: Colors.red,
                                             colorText: Colors.white,
-                                            borderRadius: 10,
-                                            margin: const EdgeInsets.all(15),
-                                            snackStyle: SnackStyle.FLOATING,
                                           );
                                         },
                                         icon: const Icon(Icons.delete, color: Colors.white),
-                                        label: const Text('حذف العميل', style: TextStyle(color: Colors.white)),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.redAccent,
-                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                        ),
+                                        label: const Text('حذف', style: TextStyle(color: Colors.white)),
+                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
                                       ),
                                     ],
                                   ),
@@ -215,6 +204,20 @@ class _ReportsPageState extends State<ReportsPage> {
               },
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // Helper widget for empty results
+  Widget _buildEmptyState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 80, color: Colors.orange),
+          SizedBox(height: 10),
+          Text('لا توجد بيانات لهذه التصفية!', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         ],
       ),
     );
